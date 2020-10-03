@@ -39,5 +39,54 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+
+    // Check whether instruction is for computation or address set
+    Not(in=instruction[15], out=addressInst);
+    Not(in=addressInst, out=compInst);
+
+    // Address Registry Input
+        // Take ALU input if Compute instruction and destination1-bit is set
+        And(a=compInst, b=instruction[5], out=ALUtoA);
+        Mux16(a=instruction, b=aluO, sel=ALUtoA, out=instrMuxO);
+        // Load instruction if Address instruction
+        Or(a=addressInst, b=ALUtoA, out=loadA);
+        ARegister(in=instrMuxO, load=loadA, out=aO);
+
+    // ALU A/M input
+    Mux16(a=aO, b=inM, sel=instruction[12], out=amMuxO);
+
+    // Data Registry input
+    And(a=compInst, b=instruction[4], out=loadD);
+    DRegister(in=aluO, load=loadD, out=dO);
+    
+    // ALU performs computation
+    ALU(x=dO, y=amMuxO, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=aluO, zr=zr, ng=ng);
+
+
+    // Jump handling
+        // LT
+        And(a=ng, b=instruction[2], out=jlt);
+        // EQ
+        And(a=zr, b=instruction[1], out=jeq);
+        // GT
+        Or(a=zr, b=ng, out=le);
+        Not(in=le, out=nle);
+        And(a=nle, b=instruction[0], out=jgt);
+        // Jump, if any jump condition is true AND Compute instruction is performed
+        Or(a=jeq, b=jlt, out=jle);
+        Or(a=jle, b=jgt, out=jump); 
+        And(a=compInst, b=jump, out=pcLoad);
+        // increment if not jump
+        Not(in=pcLoad, out=incPc);
+    
+    // Outputs
+        // PC control
+        PC(in=aO, load=pcLoad, inc=incPc, reset=reset, out[0..14]=pc);
+        // Forward ALU output to outM
+        And16(a=aluO, b=aluO, out=outM);
+        // Forward aO output to addressM
+        And16(a=aO, b=aO, out[0..14]=addressM);
+        // Write to M if Compute instruction and Memory-write-bit d3
+        And(a=compInst, b=instruction[3], out=writeM);
+
 }
